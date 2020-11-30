@@ -29,8 +29,7 @@ class CateEmbedding(keras.layers.Layer):
 
 
 class PairWiseInteraction(keras.layers.Layer):
-    def __init__(self, mask=True, **kwargs):
-        self.mask = mask
+    def __init__(self, **kwargs):
         super(PairWiseInteraction, self).__init__(**kwargs)
 
     def call(self, x):
@@ -45,12 +44,11 @@ class PairWiseInteraction(keras.layers.Layer):
         x = K.repeat_elements(x, rep=x.shape[1], axis=2)
         xt = tf.transpose(x, perm=[0, 2, 1, 3])
         out = x * xt
-        if self.mask:
-            # (1, emb_dim, n_features, n_features)
-            mask = 1 - tf.linalg.band_part(tf.ones((1, out.shape[3], out.shape[1], out.shape[2])), -1, 0)
-            # (1, n_features, n_features, emb_dim)
-            mask = tf.transpose(mask, perm=[0, 2, 3, 1])
-            out = out * mask
+        # (1, emb_dim, n_features, n_features)
+        mask = 1 - tf.linalg.band_part(tf.ones((1, out.shape[3], out.shape[1], out.shape[2])), -1, 0)
+        # (1, n_features, n_features, emb_dim)
+        mask = tf.transpose(mask, perm=[0, 2, 3, 1])
+        out = out * mask
         return tf.reshape(out, shape=(-1, out.shape[1] * out.shape[2], out.shape[3]))
 
     def compute_output_shape(self, input_shape):
@@ -85,7 +83,7 @@ class AttentionFM(object):
         self.inp = keras.Input(shape=(n_features,), name="inp")
         self.embedding_layer = CateEmbedding(emb_dim, name="embedding_layer")
         self.lr_layer = keras.layers.Dense(1, use_bias=True, name="lr")
-        self.wise_product_layer = PairWiseInteraction(mask=True, name="wise_product_interaction")
+        self.wise_product_layer = PairWiseInteraction(name="wise_product_interaction")
         self.attention_wb = keras.layers.Dense(attention_dim, use_bias=True, name="attention_wb")
         self.attention_h = keras.layers.Dense(1, use_bias=False, name="attention_h")
         self.attention_softmax = keras.layers.Lambda(lambda x: K.softmax(x, axis=1), name="attention_softmax")
