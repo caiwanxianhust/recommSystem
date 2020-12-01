@@ -84,7 +84,7 @@ class AttentionFM(object):
         self.embedding_layer = CateEmbedding(emb_dim, name="embedding_layer")
         self.lr_layer = keras.layers.Dense(1, use_bias=True, name="lr")
         self.wise_product_layer = PairWiseInteraction(name="wise_product_interaction")
-        self.attention_wb = keras.layers.Dense(attention_dim, use_bias=True, name="attention_wb")
+        self.attention_wb = keras.layers.Dense(attention_dim, use_bias=True, activation="relu", name="attention_wb")
         self.attention_h = keras.layers.Dense(1, use_bias=False, name="attention_h")
         self.attention_softmax = keras.layers.Lambda(lambda x: K.softmax(x, axis=1), name="attention_softmax")
         self.attention_psum = AttentionPSum(name="psum")
