@@ -69,3 +69,6 @@ if __name__ == "__main__":
     ncfal = NCF(5000, 7000)
     ncfal.build()
     ncfal.neumf_model.summary()
+    keras.utils.plot_model(ncfal.gmf_model, 'ncf_gmf_model.png', show_layer_names=True, show_shapes=True)
+    keras.utils.plot_model(ncfal.mlp_model, 'ncf_mlp_model.png', show_layer_names=True, show_shapes=True)
+    keras.utils.plot_model(ncfal.neumf_model, 'ncf_neumf_model.png', show_layer_names=True, show_shapes=True)
