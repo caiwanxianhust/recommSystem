@@ -169,7 +169,7 @@ $$
 )
 $$
 
-式中$p^G_u$和$p^M_u$分别代表 GMF 部分和 MLP 部分的用户嵌入（user embedding）；同样的，$q^G_i$和$q^G_i$分别表示项目的嵌入（item embedding）。使用ReLU函数作为 MLP层的激活函数，该模型结合MF的线性度和DNNs的非线性度，用以建模用户-项目之间的潜在结构。我们将这一模式称为“NeuMF”，简称神经矩阵分解（Neural Matrix Factorization）。
+式中$p^G_u$和$p^M_u$分别代表 GMF 部分和 MLP 部分的用户嵌入（user embedding）；同样的，$q^G_i$和$q^M_i$分别表示项目的嵌入（item embedding）。使用ReLU函数作为 MLP层的激活函数，该模型结合MF的线性度和DNNs的非线性度，用以建模用户-项目之间的潜在结构。我们将这一模式称为“NeuMF”，简称神经矩阵分解（Neural Matrix Factorization）。
 
 下面给出笔者的实现。
 
