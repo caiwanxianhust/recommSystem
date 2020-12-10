@@ -7,7 +7,7 @@ class MixedLogisticRegression(object):
     def __init__(self, n_features, num_blocks, **kwargs):
         super(MixedLogisticRegression, self).__init__(**kwargs)
         self.inp = keras.Input(shape=(n_features,), name="inp")
-        self.block_layer = keras.layers.Dense(num_blocks, use_bias=False, activation="sigmoid",
+        self.block_layer = keras.layers.Dense(num_blocks, use_bias=False, activation="softmax",
                                               kernel_regularizer='l1_l2', name="block_layer")
         self.lr = keras.layers.Dense(num_blocks, use_bias=False, activation="sigmoid",
                                      kernel_regularizer='l1_l2', name="lr")
