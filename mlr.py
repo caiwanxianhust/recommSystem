@@ -12,7 +12,7 @@ class MixedLogisticRegression(object):
         self.lr = keras.layers.Dense(num_blocks, use_bias=False, activation="sigmoid",
                                      kernel_regularizer='l1_l2', name="lr")
         self.multiply_layer = keras.layers.Multiply(name="multiply_layer")
-        self.sum_layer = keras.layers.Lambda(lambda x: tf.reduce_sum(x, axis=1), name="sum_layer")
+        self.sum_layer = keras.layers.Lambda(lambda x: tf.reduce_sum(x, axis=1, keepdims=True), name="sum_layer")
 
     def build(self):
         # [batch_size, n_features] -> [batch_size, num_blocks]
