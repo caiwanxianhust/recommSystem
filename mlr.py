@@ -8,9 +8,9 @@ class MixedLogisticRegression(object):
         super(MixedLogisticRegression, self).__init__(**kwargs)
         self.inp = keras.Input(shape=(n_features,), name="inp")
         self.block_layer = keras.layers.Dense(num_blocks, use_bias=False, activation="softmax",
-                                              kernel_regularizer='l1_l2', name="block_layer")
+                                              name="block_layer")
         self.lr = keras.layers.Dense(num_blocks, use_bias=False, activation="sigmoid",
-                                     kernel_regularizer='l1_l2', name="lr")
+                                     name="lr")
         self.multiply_layer = keras.layers.Multiply(name="multiply_layer")
         self.sum_layer = keras.layers.Lambda(lambda x: tf.reduce_sum(x, axis=1, keepdims=True), name="sum_layer")
 
