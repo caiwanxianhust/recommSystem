@@ -460,5 +460,116 @@ $$
 
 #### 3.1.2 梯度计算
 
-**Hierarchical Softmax** 是word2vec 中用于提高性能的一项关键技术。在
+**Hierarchical Softmax** 是word2vec 中用于提高性能的一项关键技术。在具体介绍Hierarchical Softmax之前，先引入若干符号。对于Huffman树中的某个叶子，假设它对应词典 $D$ 中的词 $w$ ，记
 
+- $p^w$ ：从根节点出发到达 $w$ 对应叶子结点的路径；
+- $l^w$ ：路径 $p^w$ 中包含结点的个数；
+- $p^w_1,p^w_2,\cdot \cdot \cdot,p^w_{l^w}$ ：路径 $p^w$ 中的 $l^w$ 个结点，其中 $p^w_1$ 表示根结点， $p^w_{l^w}$ 表示词 $w$ 对应的结点；
+- $d^w_2,d^w_3, \cdot \cdot \cdot , d^w_{l^w} \in \{0,1\}$：词 $w$ 的Hffman编码，他由 $l^w - 1$ 位编码构成，$d^w_j$ 表示路径 $p^w$ 中第 $j$ 个结点对应的编码（根结点不对应编码）；
+- $\theta ^w_1, \theta ^w_2, \cdot \cdot \cdot, \theta ^w_{l^w -1} \in R^m$：路径 $p^w$ 中非叶子节点对应的向量，$\theta ^w_j$ 表示路径 $p^w$ 中第 $j$ 个非叶子结点对应的向量。
+
+<font face="楷体" size=2 color="blue">**注3.1**： $\theta$ 这个参数有啥用？  
+按理说，我们需要得到的是词典 $D$ 中每个词的（即非叶子节点）的向量，为什么这里还要为Huffman树中的每一个非叶子节点也定义一个相同长度的向量呢？其实非叶子节点的的向量只是算法计算过程中的辅助向量，具体用途接下来详细介绍。
+</font>
+
+接下来，通过一个简单的例子讲解一下Hierarchical Softmax的实现方式吧。假设“我”、“喜欢”、“观看”、“巴西”、“足球”、“世界杯”这6个词组成词典（词频为：15，8，6，5，3，1），考虑预测词“足球”的场景。
+
+下图中由4条红色的边串起来的5个结点就构成路径 $p^w$ ，其长度 $l^w = 5$ 。$p^w_1,p^w_2,p^w_3,p^w_4,p^w_5$ 为路径 $p^w$ 上的5个结点，其中 $p^w_1$ 表示根结点。$d^w_2,d^w_3,d^w_4,d^w_5$ 分别为1、0、0、1，即足球的Huffman编码为1001。此外，$\theta ^w_1, \theta ^w_2, \theta ^w_3, \theta ^w_4$ 分别表示路径 $p^w$ 上4个非叶子结点对应的向量。
+
+![](https://mmbiz.qpic.cn/mmbiz_jpg/GJUG0H1sS5rUIOpUic5zQzSaJaZqCgmU2HicqToIbvll7O0O3WoShic3xEkZiagLm2icqXuQL9V2JXWpXViaEZ8Nqibxw/0?wx_fmt=jpeg)
+
+<center><font face="黑体" size=3>w=“足球”时的相关记号示意图</font></center>
+
+那么，如何利用向量 $\vec x_w \in R^m$ 以及Huffman树来定义函数 $p(w|Context(w))$ 呢？
+
+以上图 $w=足球$ 为例，从根节点出发到达“足球”这个叶子结点，中间共经历了4次分支（红色的边），而每一次分支都可以视为进行了一次二分类。
+
+既然是从二分类角度考虑问题，那么对于每一个叶子结点，需要为其左右孩子结点指定一个类别，即哪个是正类，哪个是负类。正好，除根节点以外，树中每个节点都对应了一个取值为0或1的Huffman编码。因此，一种最自然的做法就是将Huffman编码为1的结点定义为正类，编码为0的结点定义为负类。当然这只是个约定而已，也可以反过来将编码为1的结点定义为负类，编码为0的结点定义为正类。事实上Word2vec采用的就是后者，为方便读者对照文档看源码，这里也统一采用后者，即约定：
+$$
+\begin{equation}
+Label(p^w_i) = 1 - d^w_i, \quad i=2,3, \cdot \cdot \cdot, l^w
+\label{eq:3.3}
+\end{equation}
+$$
+简而言之，在每一个非叶子结点处分类时，分到左边是负类，分到右边是正类。
+
+根据&sect;1.3中的逻辑回归原理，一个结点被分为正类的概率是
+$$
+\begin{equation}
+\sigma(\vec {x^T_w} \theta) = \frac {1}{1+e^{-\vec {x^T_w}\theta}}
+\label{eq:3.4}
+\end{equation}
+$$
+被分为负类的概率当然就是
+$$
+\begin{equation}
+1-\sigma(\vec {x^T_w} \theta)
+\label{eq:3.5}
+\end{equation}
+$$
+上式中的 $\theta$ 向量作为逻辑回归的参数，其实就是上述提到的非叶子节点对应的向量 $\theta ^w_i$ 。
+
+再回到 $w = 足球$ 这个例子，对于从根节点出发到达”足球“这个节点所经历的4次二分类，将每次分类的结果的概率写出来就是：
+$$
+\begin{equation}
+第一次：p(d^w_2|\vec {x_w},\theta^w_1) = 1 - \sigma (\vec {x^T_w} \theta ^w_1);
+\label {eq:3.6}
+\end{equation}
+$$
+
+$$
+\begin{equation}
+第二次：p(d^w_3|\vec {x_w},\theta^w_2) = \sigma (\vec {x^T_w} \theta ^w_2);
+\label {eq:3.7}
+\end{equation}
+$$
+
+$$
+\begin{equation}
+第三次：p(d^w_4|\vec {x_w},\theta^w_3) = \sigma (\vec {x^T_w} \theta ^w_3);
+\label {eq:3.8}
+\end{equation}
+$$
+
+$$
+\begin{equation}
+第四次：p(d^w_5|\vec {x_w},\theta^w_4) = 1 - \sigma (\vec {x^T_w} \theta ^w_4);
+\label {eq:3.9}
+\end{equation}
+$$
+
+根据条件概型，$p(足球|Context(足球))$ 可以表示成如下格式：
+$$
+\begin{equation}
+p(足球|Context(足球)) = \prod ^5_{j=2} p(d^w_j|\vec {x_w},\theta^w_{j-1})
+\label {eq:3.10}
+\end{equation}
+$$
+到这里，通过“w=足球”的小例子，**Hierarchical Softmax**的基本思想已经介绍完毕了。总结一下：**对于词典 $D$ 中的任意词 $w$ ，Huffman树中必存在一条从根节点到词 $w$ 对应结点的路径 $p^w$ （且这条路是惟一的）。路径 $p^w$ 上存在 $l^w - 1$ 个分支，将每个分支看做一次二分类，每一次分类就产生一个概率，将这些概率乘起来，就得到 $p(w|Context(w))$ 。**
+
+对于公式 $\eqref{eq:3.10}$ 来说，更一般的形式，可以写成：
+$$
+\begin {equation}
+p(w|Context(w)) = \prod ^{l^w}_{j=2} p(d^w_j|\vec {x_w},\theta^w_{j-1})
+\label {eq:3.11}
+\end {equation}
+$$
+其中
+$$
+\begin {equation}
+p(d^w_j|\vec {x_w},\theta^w_{j-1}) = 
+\begin{cases}
+\sigma (\vec {x^T_w} \theta ^w_{j-1}), \quad d^w_j = 0\\
+1 - \sigma (\vec {x^T_w} \theta ^w_{j-1}), \quad d^w_j = 1
+\end{cases}
+\label {eq:3.12}
+\end {equation}
+$$
+
+将  $\eqref{eq:3.12}$ 写成一个表达式
+$$
+\begin {equation}
+p(d^w_j|\vec {x_w},\theta^w_{j-1}) = [\sigma (\vec {x^T_w} \theta ^w_{j-1})]^{1-d^w_j} \cdot [ 1- \sigma (\vec {x^T_w} \theta ^w_{j-1})]^{d^w_j} 
+\label {eq:3.13}
+\end {equation}
+$$
