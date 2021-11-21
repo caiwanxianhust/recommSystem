@@ -573,3 +573,66 @@ p(d^w_j|\vec {x_w},\theta^w_{j-1}) = [\sigma (\vec {x^T_w} \theta ^w_{j-1})]^{1-
 \label {eq:3.13}
 \end {equation}
 $$
+将 $\eqref{eq:3.11}$ 代入CBOW模型的对数似然函数 $\eqref{eq:3.1}$ ，得到
+$$
+\begin {equation}
+\begin {split}
+L &= \sum_{w \in C} \log \prod ^{l^w}_{j=2} \{ [\sigma (\vec {x^T_w} \theta ^w_{j-1})]^{1-d^w_j} \cdot [ 1- \sigma (\vec {x^T_w} \theta ^w_{j-1})]^{d^w_j} \}\\
+&= \sum_{w \in C} \sum ^{l^w}_{j=2} \{ (1-d^w_j) \cdot \log \sigma (\vec {x^T_w} \theta ^w_{j-1}) + d^w_j \cdot \log (1-\sigma (\vec {x^T_w}))\}
+\end {split}
+\label {eq:3.14}
+\end {equation}
+$$
+
+其中，把双重求和符号里面花括号里的内容记为 $L(w,j)$ ，即
+$$
+\begin {equation}
+L(w,j) = (1-d^w_j) \cdot \log \sigma (\vec {x^T_w} \theta ^w_{j-1}) + d^w_j \cdot \log (1-\sigma (\vec {x^T_w}))
+\label {eq:3.15}
+\end {equation}
+$$
+至此，已经推导出对数似然函数的表达式 $\eqref{eq:3.14}$ ，这就是CBOW模型的目标函数，接下来讨论如何对这个函数最大化。word2vec采用**随机梯度上升法**（ps:求最小值用梯度下降，最大值用梯度上升，原理都一样）。具体做法就是每取一个样本 $(Context(w),w)$ ，就对目标函数中的所有待优化的参数做一次刷新。观察目标函数 $L$ 易知，该函数中的参数包括向量 $\vec x_w , \theta ^w_{j-1}, \quad w \in C, j = 2, \cdot \cdot \cdot , l^w$ 。
+
+首先对 $\theta ^w_{j-1} $ 的梯度进行计算。
+$$
+\begin {equation}
+\begin {split}
+\frac{\partial {L(w,j)}}{\partial {\theta ^w_{j-1}}} &= \frac{\partial}{\partial {\theta ^w_{j-1}}}\{(1-d^w_j) \cdot \log \sigma (\vec {x^T_w} \theta ^w_{j-1}) + d^w_j \cdot \log (1-\sigma (\vec {x^T_w}))\}\\
+&= (1 - d^w_j)[1- \sigma (\vec {x^T_w} \theta ^w_{j-1})] \vec x_w - d^w_j \sigma (\vec {x^T_w} \theta ^w_{j-1}) \vec x_w \quad sigmoid求导\\
+&= [1- d^w_j -\sigma (\vec {x^T_w} \theta ^w_{j-1})] \vec x_w \quad 合并项
+\end {split}
+\label {eq:3.16}
+\end {equation}
+$$
+于是，$\theta ^w_{j-1}$ 的更新公式可以写为：
+$$
+\begin {equation}
+\theta ^w_{j-1} := \theta ^w_{j-1} + \eta [1- d^w_j - \sigma (\vec {x^T_w} \theta ^w_{j-1})] \vec x_w
+\label {eq:3.17}
+\end {equation}
+$$
+其中 $\eta$ 表示学习率。
+
+接下来计算 $L(w,j)$ 关于 $x_w$ 的梯度。观察 $\eqref {eq:3.15}$ 可知，$L(w,j)$ 中关于变量 $\vec x_w$ 和 $\theta ^w_{j-1}$ 是对称的，因此，计算梯度时交换位置即可，即
+$$
+\begin {equation}
+\frac{\partial {L(w,j)}}{\partial {\vec x_w}} = [1 - d^w_j - \sigma (\vec {x^T_w} \theta ^w_{j-1})] \theta ^w_{j-1}
+\label {eq:3.18}
+\end {equation}
+$$
+我们最终的目的是求词典 $D$ 中每个词的词向量，而这里的 $x_w$ 表示的是 $Context(w)$中各词词向量的累加（$\vec x_w = \sum _{\vec u \in Context(w)} \vec u$）。那么。如何利用 $\frac{\partial {L(w,j)}}{\partial {\vec x_w}}$ 对 $\vec u \in Context(w)$ 进行更新呢？word2vec中的做法简单粗暴，直接取
+$$
+\begin {equation}
+\vec u := \vec u + \eta \sum ^{l^w}_{j=2} \frac{\partial {L(w,j)}}{\partial {\vec x_w}} , \quad \vec u \in Context(w)
+\label {eq:3.19}
+\end {equation}
+$$
+即把目标函数对 $\vec x_w$ 的偏导贡献到组成 $Context(w)$ 的每一个词的词向量上。当然，笔者觉得考虑**平均贡献**也许表达式看起来更合理一些，即
+$$
+\begin {equation}
+\vec u := \vec u + \frac {\eta}{2c} \sum ^{l^w}_{j=2} \frac{\partial {L(w,j)}}{\partial {\vec x_w}} , \quad \vec u \in Context(w)
+\label {eq:3.20}
+\end {equation}
+$$
+其中，$2c$ 表示 $Context(w)$ 中词的个数（假设$Context$取 $w$ 前后各 $c$ 个词），即 $2c = |Contetx(w)|$。
+
