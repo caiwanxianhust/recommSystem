@@ -636,3 +636,79 @@ $$
 $$
 其中，$2c$ 表示 $Context(w)$ 中词的个数（假设$Context$取 $w$ 前后各 $c$ 个词），即 $2c = |Contetx(w)|$。
 
+### 3.2 Skip-gram模型
+
+本节介绍word2vec中的另一个模型——skip-gram模型，由于推导过程和CBOW相似，因此会沿用上节的记号，不再赘述。
+
+#### 3.2.1 网络结构
+下图给岀了 Skip-gram模型的网络结构，同CBOW模型的网络结构一样，它也包括三层：输入层、投影层和输出层。下面以样本 $(w,Context(w))$ 为例，对这三个层做简要说明。
+
+- 1.输人层：只含当前样本的中心词的词向量 $\vec w \in R^m$ 。
+  2.投影层：这是个恒等投影，把 $\vec w$ 投影到 $\vec w$ 。因此，**这个投影层其实是多余的，实际并不存在**，这里之所以保留投影层主要是方便和CBOW模型的网络结构做对比。
+
+- 3.输出层：和CBOW模型一样，输出层也是一棵Huffman树。
+
+#### 3.2.2 梯度计算
+
+对于 Skip-gram模型，已知的是当前词 $w$ ，需要对其上下文 $Context(w)$ 中的词进行预测，因此目标函数应该形如 $\eqref{eq:3.2}$ ，且关键是条件概率函数 $p(Context(w)|w)$ 的构造，根据条件概型，Skip-gram模型中将其定义为
+$$
+\begin{equation}
+p(Context(w)|w) = \prod _{u \in Context(w)} p(u|w)
+\label {eq:3.21}
+\end{equation}
+$$
+上式中的 $p(u|w)$ 按照上节中介绍的 Hierarchical Softmax 思想，可表示为
+$$
+\begin {equation}
+p(u|w) = \prod ^{l^u}_{j=2} p(d^u_j | \vec w, \theta ^u_{j-1})
+\label {eq:3.22}
+\end {equation}
+$$
+其中
+$$
+\begin {equation}
+p(d^u_j | \vec w, \theta ^u_{j-1}) = [\sigma (\vec w ^T \theta^u_{j-1})]^{1-d^u_j} \cdot [1- \sigma (\vec w ^T \theta^u_{j-1}]^{d^u_j}
+\label {eq:3.23}
+\end {equation}
+$$
+将 $\eqref {eq:3.23}$ 依次代回，可得对数似然函数 $\eqref{eq:3.2}$ 的具体表达式
+$$
+\begin {equation}
+\begin {split}
+L &= \sum _{w \in C} \log \prod _{u \in Context](w)} \prod ^{l^u}_{j=2} \{ [\sigma (\vec w ^T \theta^u_{j-1})]^{1-d^u_j} \cdot [1- \sigma (\vec w ^T \theta^u_{j-1}]^{d^u_j} \}\\
+&= \sum _{w \in C} \prod _{u \in Context](w)} \sum ^{l^u}_{j=2} \{ (1-d^u_j) \cdot \log \sigma (\vec w ^T \theta^u_{j-1}) + d^u_j \cdot \log (1- \sigma (\vec w ^T \theta^u_{j-1})) \}
+\end {split}
+\label {eq:3.24}
+\end {equation}
+$$
+同样，为下面梯度推导书写方便起见，将三重求和符号下的花括号里的内容记为 $L(w,u,j)$ ，即
+$$
+\begin {equation}
+L(w,u,j) = (1-d^u_j) \cdot \log \sigma (\vec w ^T \theta^u_{j-1}) + d^u_j \cdot \log (1- \sigma (\vec w ^T \theta^u_{j-1})) 
+\label {eq:3.25}
+\end {equation}
+$$
+至此，已经推导出对数似然函数的表达式 $\eqref{eq:3.24}$ ，这就是 Skip-gram模型的目标函数。接下来同样利用随机梯度上升法对其进行优化，关键是要给出两类梯度。
+
+首先考虑 $L(w,u,j)$ 关于 $\theta ^u_{j-1}$ 的梯度计算（与CBOW模型对应部分推导过程完全类似）
+$$
+\begin {equation}
+\begin {split}
+\frac {\partial {L(w,u,j)}}{\partial {\theta ^u_{j-1}}} &= \frac {\partial}{\partial {\theta ^u_{j-1}}} \{ (1-d^u_j) \cdot \log \sigma (\vec w ^T \theta^u_{j-1}) + d^u_j \cdot \log (1- \sigma (\vec w ^T \theta^u_{j-1})) \} \\
+&= (1-d^u_j)][1- \sigma (\vec w ^T \theta^u_{j-1})] \vec w - d^u_j \sigma (\vec w ^T \theta^u_{j-1}) \vec w \\
+&= [1-d^u_j - \sigma (\vec w ^T \theta^u_{j-1})] \vec w
+\end {split}
+\label {eq:3.26}
+\end {equation}
+$$
+于是， $\theta ^u_{j-1}$ 的更新公式可写为
+$$
+\begin {equation}
+\theta ^u_{j-1} := \theta ^]u_{j-1} + \eta [1-d^u_j - \sigma (\vec w ^T \theta^u_{j-1})] \vec w
+\label {eq:3.27}
+\end {equation}
+$$
+
+
+ 
+
