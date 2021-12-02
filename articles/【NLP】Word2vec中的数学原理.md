@@ -645,8 +645,11 @@ $$
 
 - 1.输人层：只含当前样本的中心词的词向量 $\vec w \in R^m$ 。
   2.投影层：这是个恒等投影，把 $\vec w$ 投影到 $\vec w$ 。因此，**这个投影层其实是多余的，实际并不存在**，这里之所以保留投影层主要是方便和CBOW模型的网络结构做对比。
-
 - 3.输出层：和CBOW模型一样，输出层也是一棵Huffman树。
+
+![](https://mmbiz.qpic.cn/mmbiz_png/GJUG0H1sS5paibiaQMelJeDNHSKgfhLKepYUicxgUKicibaX6LaK4DD52XWVfiaCaaH8llk8Gia0Gdicg2aAXMaSzxlvOQ/0?wx_fmt=png)
+
+<center><font face="黑体" size=3>Skip-gram模型网络结构示意图</font></center>
 
 #### 3.2.2 梯度计算
 
@@ -704,11 +707,361 @@ $$
 于是， $\theta ^u_{j-1}$ 的更新公式可写为
 $$
 \begin {equation}
-\theta ^u_{j-1} := \theta ^]u_{j-1} + \eta [1-d^u_j - \sigma (\vec w ^T \theta^u_{j-1})] \vec w
+\theta ^u_{j-1} := \theta ^u_{j-1} + \eta [1-d^u_j - \sigma (\vec w ^T \theta^u_{j-1})] \vec w
 \label {eq:3.27}
 \end {equation}
 $$
 
+接下来考虑$L(w, u, j)$ 关于 $\vec w$ 的梯度。利用 $\vec w$ 和 $\theta ^w_{j-1}$ 的对称性，有
+$$
+\begin {equation}
+\frac {\partial L(w, u, j)}{\partial \vec w} = [1 - d^u_j - \sigma (\vec w ^T \theta^u_{j-1})] \theta ^u_{j-1}
+\label {eq:3.28}
+\end {equation}
+$$
+于是，$\vec w$ 的更新公式可以写为
+$$
+\begin {equation}
+\vec w := \vec w + \eta \sum _{u \in Context(w)} \sum ^{l^w}_{j]=2} \frac {\partial L(w, u, j)}{\partial \vec w}
+\label {eq:3.29}
+\end {equation}
+$$
 
- 
+<font face="楷体" size=2 color="blue">**注3.2**：在word2vec源码中并不是等 $Context(w)$ 中的所有词都处理完再更新 $\vec w$ ，而是每处理完 $Context(w)$ 中的一个词 $u$ 就刷新一次 $\vec w$ 。</font>
 
+## 4 基于 Negative Sampling 的模型
+
+本节将介绍基于**Negative Sampling**的 CBOW 和 Skip-gram 模型。Negative Sampling（简称为 NEG）是Tomas Mikolov 等人在2013年提出的,，它是 NCE（Noise ContrastiveEstimation噪声对比估计）的一个简化版本，目的是用来提高训练速度并改善所得词向量的质量。与Hierarchical Softmax相比，NEG 不再使用使用 复杂的Huffman 树，而是利用相对简单的随机负采样，能大幅度提高性能，因而可作为Hierarchical Softmax技术的一种替代，本质上二者都是通过规避对整个词典做softmax来提升word2vec的性能。
+
+<font face="楷体" size=2 color="blue">**注4.1**：NCE的细节有点复杂，其本质是利用已知的概率密度函数来估计未知的概率密度函数。简单来说，假设未知的概率密度函数为 X，已知的概率密度为 Y，如果得到了 X 和 Y
+的关系,那么 X 也就可以求出来了，具体可参考文章[《Noise Contrastive Estimation - 磊爷的文章 - 知乎》](https://zhuanlan.zhihu.com/p/76568362)</font>
+
+### 4.1 CBOW模型
+
+在CBOW模型中，已知词 $w$ 的上下文 $Context(w)$，需要预测 $w$，因此，对于给定的 $Contert(w)$，词 $w$ 就是一个正样本，其它词就是负样本了。负样本那么多，该如何选取呢？这个问题比较独立，我们放到后面再进行介绍。
+
+假定现在已经选好了一个关于 $Contert(w)$ 的负样本子集 $NEG(w) \neq \emptyset$。且对 $\forall \widetilde {w} \in D$，定义
+$$
+\begin {equation}
+L ^w (\widetilde {w}) = 
+\begin{cases}
+1, \quad \widetilde {w} = w\\
+0, \quad \widetilde {w} \neq w
+\end{cases}
+\label {eq:4.1}
+\end {equation}
+$$
+表示词 $\widetilde {w}$ 的标签，即正样本的标签为1，负样本的标签为0。
+
+对于一个给定的正样本 $(Context(w),w)$，我们希望最大化
+$$
+\begin {equation}
+g(w) = \prod _{u \in \{w\} \cup NEG(w)} p(u|Context(w))
+\label {eq:4.2}
+\end {equation}
+$$
+其中
+$$
+\begin {equation}
+p(u|Context(w)) = 
+\begin {cases}
+\sigma (\vec {x_w} ^T \theta ^u), \quad L^w(u) = 1 \\
+1 - \sigma (\vec {x_w} ^T \theta ^u), \quad L^w(u) = 0
+\end {cases}
+\label {eq:4.3}
+\end {equation}
+$$
+写成整体表达式
+$$
+\begin {equation}
+p(u|Context(w)) = [\sigma (\vec {x_w} ^T \theta ^u)] ^ {L^w(u)} \cdot [1- \sigma (\vec {x_w} ^T \theta ^u)] ^ {1 - L^w(u)}
+
+\label {eq:4.4}
+\end {equation}
+$$
+式中 $\vec {x_w}$ 表示 $Context(w)$ 中各词的词向量之和，而 $\theta ^u$ 表示词 $u$ 对应的一个辅助向量，为待训练参数。
+
+为什么要最大化 $g(w)$ 呢？让我们先来看看 $g(w)$ 的表达式，将 $\eqref {eq:4.4}$ 代入 $\eqref {eq:4.3}$ ，则
+$$
+\begin {equation}
+g(w) = \sigma (\vec {x_w} ^T \theta ^w) \prod _{u \in NEG(w)} [1 - \sigma (\vec {x_w} ^T \theta ^u)]
+\label {eq:4.5}
+\end {equation}
+$$
+式中，$\sigma (\vec {x_w} ^T \theta ^w)$ 表示当上下文为 $Context(w)$ 时，预测中心词为 $w$ 的概率，而 $\sigma (\vec {x_w} ^T \theta ^u), u \in NEG(w)$ 则表示当上下文为 $Context(w)$ 时，预测中心词为 $u$ 的概率 （这里可看成一个二分类问题，具体可参见预备知识中的逻辑回归）。从形式上看，最大化 $g(w)$，相当于最大化 $\sigma (\vec {x_w} ^T \theta ^w)$ ，同时最小化所有的 $\sigma (\vec {x_w} ^T \theta ^u), u \in NEG(w)$ ，这不正是我们希望的吗？增大正样本的概率同时降低负样本的概率。于是，对于一个给定的语料库 $C$ ，函数
+$$
+\begin {equation}
+G = \prod _{w \in C} g(w)
+\label {eq:4.6}
+\end {equation}
+$$
+就可以作为整体优化的目标。当然，为计算方便，对 $G$ 取对数，最终的目标函数（为和前面章节统一起见，这里仍将其记为 $L$）就是
+$$
+\begin {equation}
+\begin {split}
+L &= \log {G} = \log {\prod _{w \in C} g(w)} = \sum _{w \in C} \log {g(w)} \\
+&= \sum _{w \in C} \log \prod _{u \in \{w\} \cup NEG(w)} \{[\sigma (\vec {x_w} ^T \theta ^u)] ^ {L^w(u)} \cdot [1- \sigma (\vec {x_w} ^T \theta ^u)] ^ {1 - L^w(u)}\} \\
+&= \sum _{w \in C} \sum _{u \in \{w\} \cup NEG(w)} \{L^w (u) \cdot \log \sigma (\vec {x_w}^T \theta ^u) + [1-L^w (u)] \cdot \log (1-\sigma (\vec {x_w}^T \theta ^u))\}
+\end {split}
+\label {eq:4.7}
+\end {equation}
+$$
+为下面梯度推导方便起见，将上式中双重求和符号下花括号里的内容简记为 $L(w,u)$，即
+$$
+\begin {equation}
+L(w,u) = L^w (u) \cdot \log \sigma (\vec {x_w}^T \theta ^u) + [1-L^w (u)] \cdot \log (1-\sigma (\vec {x_w}^T \theta ^u))
+\label {eq:4.8}
+\end {equation}
+$$
+接下来利用随机梯度上升法对 $\eqref{eq:4.7}$ 进行优化，关键是要给出 $L$ 的两类梯度。首先考虑 $L(w,u)$ 关于 $\theta ^u$ 的梯度计算。
+$$
+\begin {equation}
+\begin {split}
+\frac {\partial L(w,u)}{\partial \theta ^u} &= \frac {\partial}{\partial \theta ^u} \{L^w (u) \cdot \log \sigma (\vec {x_w}^T \theta ^u) + [1-L^w (u)] \cdot \log (1-\sigma (\vec {x_w}^T \theta ^u)) \} \\
+&= L^w (u) [ 1- \sigma (\vec {x_w}^T \theta ^u)] \vec {x_w} - [1-L^w (u)]\sigma (\vec {x_w}^T \theta ^u) \vec {x_w} \\
+&= [L^w(u) - \sigma (\vec {x_w}^T \theta ^u)] \vec {x_w}
+\end {split}
+\label {eq:4.9}
+\end {equation}
+$$
+于是， $\theta ^u$ 的更新公式可写为
+$$
+\begin {equation}
+\theta ^u := \theta ^u + \eta [L^w(u) - \sigma (\vec {x_w}^T \theta ^u)] \vec {x_w}
+\label {eq:4.10}
+\end {equation}
+$$
+接下来考虑 $L(w,u)$ 关于 $\vec {x_w}$ 的梯度。同样利用 $L(w,u)$ 中 $\vec {x_w}$ 和 $\theta ^u$ 的对称性，有
+$$
+\begin {equation}
+\frac {\partial L(w,u)}{\partial \vec {x_w}} = [L^w(u) - \sigma (\vec {x_w}^T \theta ^u)] \theta ^u
+\label {eq:4.11}
+\end {equation}
+$$
+于是，利用 $\frac {\partial L(w,u)}{\partial \vec {x_w}}$ ，可得 $\vec {\widetilde w}, \widetilde w \in Context(w)$ 的更新公式为
+$$
+\begin {equation}
+\vec {\widetilde w} := \vec {\widetilde w} + \eta \sum _{u \in \{w\} \cup NEG(w)} \frac {\partial L(w,u)}{\partial \vec {x_w}}, \quad \widetilde w \in Context(w)
+\label {eq:4.12}
+\end {equation}
+$$
+
+### 4.2 Skip-gram 模型
+
+本小节介绍**基于 Negative Sampling 的 Skip-gram 模型**。有了 Hierarchical Softmax 框架下由 CBOW 模型过渡到 Skip-gram 模型
+型的推导经验，这里，我们仍然可以这样来做。首先，将优化目标函数由原来的
+$$
+\begin {equation}
+G = \prod _{w \in C} g(w)
+\label {eq:4.13}
+\end {equation}
+$$
+变成了
+$$
+\begin {equation}
+G = \prod _{w \in C} \prod _{u \in Context(w)} g(u)
+\label {eq:4.14}
+\end {equation}
+$$
+这里，$\prod _{u \in Context(w)} g(u)$ 表示对于一个给定的样本 $(w, Context(w))$ ，我们希望最大化的量，$g(u)$ 类似于上一节的 $g(w)$ 定义为
+$$
+\begin {equation}
+g(u) = \prod _{z \in \{u\} \cup NEG(u)} p(z|w)
+
+\label {eq:4.18}
+\end {equation}
+$$
+其中 $NEG(u)$ 表示处理词 $u$ 时生成的负样本子集，条件概率
+$$
+\begin {equation}
+p(z|w) = 
+\begin {cases}
+\sigma ({\vec w} ^T \theta ^z), \quad L^u(z) = 1 \\
+1- \sigma ({\vec w} ^T \theta ^z) , \quad L^u(z) = 0
+\end {cases}
+\label {eq:4.19}
+\end {equation}
+$$
+或者写成整体表达式
+$$
+\begin {equation}
+p(z|w) = [\sigma ({\vec w} ^T \theta ^z)] ^ {L^u(z)} \cdot [1 - \sigma ({\vec w} ^T \theta ^z)] ^ {1 - L^u(z)}
+\label {eq:4.20}
+\end {equation}
+$$
+同样，我们对 $G$ 取对数，最终的目标函数就是
+$$
+\begin {equation}
+\begin {split}
+L &= \log G = \log \prod _{w \in C} \prod _{u \in Context(w)} g(u) = \sum _{w \in C} \sum _{u \in Context(w)} \log g(u) \\
+&= \sum _{w \in C} \sum _{u \in Context(w)} \log \prod _{z \in \{u\} \cup NEG(u)} p(z|w) \\
+&= \sum _{w \in C} \sum _{u \in Context(w)} \prod _{z \in \{u\} \cup NEG(u)} \log p(z|w) \\
+&= \sum _{w \in C} \sum _{u \in Context(w)} \prod _{z \in \{u\} \cup NEG(u)} \log \{ [\sigma ({\vec w} ^T \theta ^z)] ^ {L^u(z)} \cdot [1 - \sigma ({\vec w} ^T \theta ^z)] ^ {1 - L^u(z)} \} \\
+&= \sum _{w \in C} \sum _{u \in Context(w)} \prod _{z \in \{u\} \cup NEG(u)} \{ L^u(z) \cdot \log (\sigma ({\vec w} ^T \theta ^z)) + [1 - L^u(z)] \cdot \log (1-\sigma ({\vec w} ^T \theta ^z)) \}
+\end {split}
+\label {eq:4.21}
+\end {equation}
+$$
+为下面梯度推导方便起见，将上式中花括号里的内容简记为 $L(w,z)$，即
+$$
+\begin {equation}
+L(w,z) = L^u(z) \cdot \log (\sigma ({\vec w} ^T \theta ^z)) + [1 - L^u(z)] \cdot \log (1-\sigma ({\vec w} ^T \theta ^z))
+\label {eq:4.22}
+\end {equation}
+$$
+接下来利用随机梯度上升法对 $\eqref{eq:4.22}$ 进行优化，关键是要给出 $L$ 的两类梯度。首先考虑 $L(w,z)$ 关于 $\theta ^z$ 的梯度计算。
+$$
+\begin {equation}
+\begin {split}
+\frac {\partial L(w,z)}{\partial \theta ^z} &= \frac {\partial}{\partial \theta ^z} \{L^u(z) \cdot \log (\sigma ({\vec w} ^T \theta ^z)) + [1 - L^u(z)] \cdot \log (1-\sigma ({\vec w} ^T \theta ^z)) \} \\
+&= L^u (z) [ 1- \sigma ({\vec w} ^T \theta ^z)] \vec w - [1-L^u (z)]\sigma ({\vec w} ^T \theta ^z) \vec w \\
+&= [L^u(z) - \sigma ({\vec w} ^T \theta ^z)] \vec w
+\end {split}
+\label {eq:4.23}
+\end {equation}
+$$
+于是， $\theta ^z$ 的更新公式可写为
+$$
+\begin {equation}
+\theta ^z := \theta ^z + \eta [L^u(z) - \sigma ({\vec w} ^T \theta ^z)] \vec w
+\label {eq:4.24}
+\end {equation}
+$$
+接下来考虑 $L(w,z)$ 关于 $\vec w$ 的梯度。同样利用 $L(w,z)$ 中 $\vec w$ 和 $\theta ^z$ 的对称性，有
+$$
+\begin {equation}
+\frac {\partial L(w,z)}{\partial \vec w} = [L^u(z) - \sigma ({\vec w} ^T \theta ^z)] \theta ^z
+\label {eq:4.25}
+\end {equation}
+$$
+于是，利用 $\frac {\partial L(w,z)}{\partial \vec w}$ ，可得 $\vec w,  w \in C$ 的更新公式为
+$$
+\begin {equation}
+\vec { w} := \vec {w} + \eta \sum _{z \in \{u\} \cup NEG(u)} \frac {\partial L(w,z)}{\partial \vec w}, \quad w \in C, u \in Context(w)
+\label {eq:4.26}
+\end {equation}
+$$
+
+从上式可以看出，对于每一个样本 $(w, Context(w))$ ，需要针对 $Context(w)$ 中的每一个词 $u$ 进行负采样。但是word2vec源码中基于 Negative Sampling 的 Skip-gram 模型并不是基于目标函数 $\eqref {eq:4.21}$ 实现的，而是针对词 $w$ 进行了 $|Context(w)|$ 次负采样。本质上有些类似 CBOW 模型，区别在于 CBOW 模型是将 $Context(w)$ 中的所有词做了累加处理生成 $\vec {x_w}$ 来预测 $w$ ，而word2vec源码把上下文 $Context(w)$ 中的词拆开考虑，用每一个词 $u$ 预测 $w$ 。
+
+对于一个给定样本 $(w, Context(w))$ ，我们希望最大化
+$$
+\begin {equation}
+g(w) = \prod _{u \in Context(w)} \prod _{z \in \{ w \} \cup NEG^{u} (w)} p(z|u)
+\label {eq:27}
+\end {equation}
+$$
+其中
+$$
+\begin {equation}
+p(z|u) = 
+\begin {cases}
+\sigma ({\vec u} ^T \theta ^z), \quad L^w(z) = 1 \\
+1 - \sigma ({\vec u} ^T \theta ^z), \quad L^w(z) = 0
+\end {cases}
+\label {eq:4.28}
+\end {equation}
+$$
+或者写成整体表达式
+$$
+\begin {equation}
+p(z|u) = [\sigma ({\vec u} ^T \theta ^z)] ^ {L^w(z)} \cdot [1- \sigma ({\vec u} ^T \theta ^z)] ^ {1- L^w(z)}
+\label {eq:4.29}
+\end {equation}
+$$
+这里 $NEG^{u} (w)$ 表示处理词 $u$ 时对 $w$ 负采样生成的负样本子集。于是，对于一个给定的语料库 $C$ ，函数 $G$ 作为整体优化目标
+$$
+\begin {equation}
+G = \prod _{w \in C} g(w)
+\label {eq:4.31}
+\end {equation}
+$$
+对 $G$ 取对数，最终的目标函数就是
+$$
+\begin {equation}
+\begin {split}
+L &= \log G = \log \prod _{w \in C} g(w) = \sum _{w \in C} \log g(w) \\
+&= \sum _{w \in C} \log \prod _{u \in Context(w)} \prod _{z \in \{ w \} \cup NEG^{u} (w)} \{ [\sigma ({\vec u} ^T \theta ^z)] ^ {L^w(z)} \cdot [1- \sigma ({\vec u} ^T \theta ^z)] ^ {1- L^w(z)} \} \\
+&= \sum _{w \in C} \prod _{u \in Context(w)} \prod _{z \in \{ w \} \cup NEG^{u} (w)} \{ L^w(z) \cdot \log \sigma ({\vec u} ^T \theta ^z) + [1- L^w(z)] \cdot \log (1- \sigma ({\vec u} ^T \theta ^z)) \}
+\end {split}
+\label {eq:4.32}
+\end {equation}
+$$
+为下面梯度推导方便起见，将三重求和符号下花括号里的内容简记为 $L(w, u, z)$ ，即
+$$
+\begin {equation}
+L(w, u, z) = L^w(z) \cdot \log \sigma ({\vec u} ^T \theta ^z) + [1- L^w(z)] \cdot \log (1- \sigma ({\vec u} ^T \theta ^z))
+\label {eq:4.33}
+\end {equation}
+$$
+接下来利用随机梯度上升法对 $\eqref {eq:4.32}$ 进行优化，关键是要给出 $L$ 的两类梯度。首先考虑 $L(w,u,z)$ 关于 $\theta ^z$ 的梯度计算。
+$$
+\begin {equation}
+\begin {split}
+\frac {\partial L(w,u,z)}{\partial \theta ^z} &= \frac {\partial}{\partial \theta ^z} \{ L^w(z) \cdot \log \sigma ({\vec u} ^T \theta ^z) + [1- L^w(z)] \cdot \log (1- \sigma ({\vec u} ^T \theta ^z)) \} \\
+&= L^w(z) \cdot [1 - \sigma ({\vec u} ^T \theta ^z)] \vec u - [1- L^w(z)] \cdot \sigma ({\vec u} ^T \theta ^z) \vec u \\
+&= [L^w(z) - \sigma ({\vec u} ^T \theta ^z)] \vec u
+\end {split}
+\label {eq:4.34}
+\end {equation}
+$$
+接下来，$\theta ^z$ 的更新公式可以写为
+$$
+\begin {equation}
+\theta ^z := \theta ^z + \eta [L^w(z) - \sigma ({\vec u} ^T \theta ^z)] \vec u
+\label {eq:4.35}
+\end {equation}
+$$
+然后计算 $L(w,u,z)$ 关于 $\vec u$ 的梯度，利用 $L(w,u,z)$ 中 $\vec u$ 和 $\theta ^z$ 的对称性，有
+$$
+\begin {equation}
+\frac {\partial L(w,u,z)}{\partial \vec u} = [L^w(z) - \sigma ({\vec u} ^T \theta ^z)] \theta ^z
+\label {eq:4.36}
+\end {equation}
+$$
+于是，利用 $\frac {\partial L(w,u,z)}{\partial \vec u}$ ，可得 $\vec u,  u \in Context(w)$ 的更新公式为
+$$
+\begin {equation}
+\vec u := \vec u + \eta \sum _{z \in \{ w \} \cup NEG^{u} (w)} \frac {\partial L(w,u,z)}{\partial \vec u}
+\label {eq:4.37}
+\end {equation}
+$$
+
+### 4.3 负采样算法
+
+顾名思义，在基于 Negative Sampling 的 CBOW 和 Skip-gram 模型中，负采样是个很重要的环节。即，对于一个给定的词 $w$，如何生成 $NEG(w)$呢？
+**采样思想**：词典 $D$ 中的词在语料 $C$ 中出现的次数有高有低，对于那些高频词，被选为负样本的概率就应该比较大，反之，对于那些低频词，其被选中的概率就应该比较小。这就是我们对采样过程的一个大致要求，本质上就是一个带权采样问题。下面先用一段通俗的描述来帮助读者理解带权采样的机理。
+
+设词典 $D$ 中的每个词 $u$ 对应一个线段 $l(w)$， 长度为
+$$
+\begin {equation}
+len (w) = \frac {counter(w)}{\sum _{u \in D} counter(u)}
+\label {eq:4.38}
+\end {equation}
+$$
+这里 $counter(u)$ 表示一个词在语料 $C$ 中出现的次数（即词频，分母中的求和项用来做归化）。现在将这些线段首尾相连地拼接在一起，形成一个长度为1的单位线段。如果随机地往这个单位线段上打点，则其中长度越长的线段（对应高频词）被打中的概率就越大。
+
+接下来再谈谈 word2vec 中的具体做法。记 $l_0 = 0, l_k = \sum ^k_{j=1} len(w_j), k=1,2,\cdot \cdot \cdot ,N$ 这里 $w_j$ 表示词典 $D$ 中第 $j$ 个词，则以 $ l_k$ 为剖分节点可得到区间 $[0,1]$ 上的一个非等距剖分，$I_i = (l_{i-1}, l_i],i=1,2,\cdot \cdot \cdot ,N$  为其 $N$ 个剖分区间。进一步引入区间 $[0,1]$ 上的一个等距离剖分，剖分节点为 $m_j,j=1,2,\cdot \cdot \cdot ,M$ 其中 $M >> N$，源码中 $M = 10^8$ ，具体见示意图。
+
+![](https://mmbiz.qpic.cn/mmbiz_png/GJUG0H1sS5pRq3cHRcyaMVlxw1ZPpqEySbYbb25m5tF7GDLNxmae94WjACEZjOvVUSesgbVibtiavKnyBc5qUqIQ/0?wx_fmt=png)
+
+<center><font face="黑体" size=3>Table(*)映射关系示意图</font></center>
+
+将内部剖分节点 $m_j$ 投影到非等距剖分上，如上图中的虚线所示，则可建立 $m_j$ 与区间 $I_i$ （或者说$w_i$）的映射关系
+$$
+\begin {equation}
+Table(j) = w_i, \quad where \quad m_j \in I_i, \quad j = 1,2, \cdot \cdot \cdot, M-1
+\label {eq:4.39}
+\end {equation}
+$$
+有了这个映射，采样就简单了：每次生成一个 $[1,M - 1]$ 间的随机整数 $r$， $Table(r)$ 就是一个样本。当然，这里还有一个细节，当对 $w_i$ 进行负采样时，如果碰巧选到 $w_i$ 自己怎么办？跳过去即可，源码中也是这么处理的。
+
+**以上就是带权采样的做法，说实话对于这种权重直接为词频的采样，直接把语料中所有词（不去重）放进一个大列表，每次从中random一个词即可，和上面的效果是一毛一样的。**
+
+值得一提的是，word2vec 源码中为词典 $D$ 中的词设置权值时，不是直接用 $counter(w)$，而是对其作了 $\alpha$ 次幂，其中 $\alpha = \frac {3}{4}$ ，即 $\eqref {eq:4.38}$ 变成了
+$$
+\begin {equation}
+len (w) = \frac {[counter(w)]^{\frac {3}{4}}}{\sum _{u \in D} [counter(u)]^{\frac {3}{4}}}
+\label {eq:4.40}
+\end {equation}
+$$
